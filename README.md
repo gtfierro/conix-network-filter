@@ -12,7 +12,7 @@ go build
 
 ## Documentation
 
-This is a simple network monitoring tool. It uses libpcap to read packets off of a local interface, formats them into a simple representation of a network flow and publishes these on an MQTT broker.
+This is a simple network monitoring tool. It uses libpcap to read packets off of a local interface, formats them into a simple representation of a network flow and publishes these on an MQTT broker (JSON-serialized)
 
 The packet structure looks like this:
 
