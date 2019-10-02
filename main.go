@@ -17,6 +17,17 @@ import (
 	"time"
 )
 
+var mqtt1 = Filter{
+	SrcPort: "1883",
+}
+var mqtt2 = Filter{
+	DstPort: "1883",
+}
+
+func isMQTTPacket(pkt FlowPacket) bool {
+	return mqtt1.MatchesPacket(pkt) || mqtt2.MatchesPacket(pkt)
+}
+
 type FlowPacket struct {
 	SrcIP    string
 	DstIP    string
@@ -24,6 +35,14 @@ type FlowPacket struct {
 	DstPort  string
 	Protocol string
 	Payload  string
+}
+
+func (pkt FlowPacket) ToJSON() []byte {
+	b, err := json.Marshal(pkt)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 func (pkt FlowPacket) GetTopic() string {
@@ -44,12 +63,22 @@ func (pkt FlowPacket) GetTopic() string {
 }
 
 // matches packets in a stream that match this
-type WAVEFilter struct {
-	SrcIPFilter    string
-	DstIPFilter    string
-	SrcPortFilter  string
-	DstPortFilter  string
-	ProtocolFilter string
+type Filter struct {
+	SrcIP    string
+	DstIP    string
+	SrcPort  string
+	DstPort  string
+	Protocol string
+	// topic to push filtered packets onto
+	Topic string
+}
+
+func (f Filter) ToJSON() []byte {
+	b, err := json.Marshal(f)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 // accepts filters like 10.10.0.1/24 and addresses
@@ -90,25 +119,25 @@ func matchIPSubnet(filter, address string) bool {
 
 // returns true if the filter matches the given packet
 // currently matches explicit IPs
-func (filter *WAVEFilter) MatchesPacket(pkt FlowPacket) bool {
+func (filter *Filter) MatchesPacket(pkt FlowPacket) bool {
 	// apply filter to src/dst IP
-	if filter.SrcIPFilter != "" && !matchIPSubnet(filter.SrcIPFilter, pkt.SrcIP) {
+	if filter.SrcIP != "" && !matchIPSubnet(filter.SrcIP, pkt.SrcIP) {
 		return false
 	}
-	if filter.DstIPFilter != "" && !matchIPSubnet(filter.DstIPFilter, pkt.DstIP) {
+	if filter.DstIP != "" && !matchIPSubnet(filter.DstIP, pkt.DstIP) {
 		return false
 	}
 
 	// filter on port
-	if filter.SrcPortFilter != "" && filter.SrcPortFilter != "*" && filter.SrcPortFilter != pkt.SrcPort {
+	if filter.SrcPort != "" && filter.SrcPort != "*" && filter.SrcPort != pkt.SrcPort {
 		return false
 	}
-	if filter.DstPortFilter != "" && filter.DstPortFilter != "*" && filter.DstPortFilter != pkt.DstPort {
+	if filter.DstPort != "" && filter.DstPort != "*" && filter.DstPort != pkt.DstPort {
 		return false
 	}
 
 	// filter on protocol
-	if filter.ProtocolFilter != "" && filter.ProtocolFilter != "*" && filter.ProtocolFilter != pkt.Protocol {
+	if filter.Protocol != "" && filter.Protocol != "*" && filter.Protocol != pkt.Protocol {
 		return false
 	}
 
@@ -164,23 +193,71 @@ func doScrape(c *cli.Context) error {
 				p.Protocol = "udp"
 			}
 
-			//TODO: add payload?
-			log.Printf("%s: %+v", p.GetTopic(), p)
-			pktjson, err := json.Marshal(p)
-			if err != nil {
-				log.Println("marshal packet", err)
+			// filter out MQTT
+			if isMQTTPacket(p) {
 				continue
 			}
 
-			token := client.Publish(p.GetTopic(), 0, false, pktjson)
+			//TODO: add payload?
+			log.Printf("%s: %+v", p.GetTopic(), p)
+
+			token := client.Publish(p.GetTopic(), 0, false, p.ToJSON())
 			token.Wait()
 		}
 	}
 	return nil
 }
 
+func makeFilter(f Filter) func(mqtt.Client, mqtt.Message) {
+
+	return func(client mqtt.Client, msg mqtt.Message) {
+		var pkt FlowPacket
+		err := json.Unmarshal(msg.Payload(), &pkt)
+		if err != nil {
+			log.Println("Could not load packet")
+		}
+
+		if f.MatchesPacket(pkt) {
+			// publish
+			token := client.Publish(f.Topic, 0, false, msg.Payload())
+			token.Wait()
+		}
+	}
+}
+
 func doFilter(c *cli.Context) error {
-	//client := getClient(c.String("broker"))
+	client := getClient(c.String("broker"))
+
+	filter_cb := func(client mqtt.Client, msg mqtt.Message) {
+		var filter Filter
+		err := json.Unmarshal(msg.Payload(), &filter)
+		if err != nil {
+			log.Println("Could not load packet")
+		}
+		if filter.Topic == "" {
+			log.Println("Filter needs output topic")
+			return
+		}
+		log.Println("Making filter", filter)
+		cb := makeFilter(filter)
+
+		// subscribe to the broker to get all packets
+		token := client.Subscribe("packet/#", 1, cb)
+		token.Wait()
+
+	}
+
+	// subscribe to topic that creates filters
+	token1 := client.Subscribe("make_filter", 1, filter_cb)
+	token1.Wait()
+	defaultFilter := Filter{
+		Protocol: "tcp",
+		Topic:    "gabetest",
+	}
+	client.Publish("make_filter", 1, false, defaultFilter.ToJSON())
+
+	select {}
+
 	log.Println(c.StringSlice("filter"))
 
 	return nil
@@ -212,7 +289,7 @@ func main() {
 			Action: doScrape,
 		},
 		{
-			Name:   "filter",
+			Name:   "netview",
 			Usage:  "Filter traffic published on an MQTT bus according to a WAVE proof authenticated filter",
 			Action: doFilter,
 			Flags: []cli.Flag{
@@ -220,10 +297,6 @@ func main() {
 					Name:  "broker, b",
 					Usage: "MQTT broker",
 					Value: "tcp://localhost:1883",
-				},
-				cli.StringSliceFlag{
-					Name:  "filter, f",
-					Usage: "Filters: srcip|dstip|srcport|dstport|transport",
 				},
 			},
 		},
@@ -236,10 +309,10 @@ func main() {
 
 	//c := getClient(*broker)
 
-	//f1 := WAVEFilter{
+	//f1 := Filter{
 	//	SrcIPFilter: "192.168.1.1/16",
 	//}
-	//f2 := WAVEFilter{
+	//f2 := Filter{
 	//	DstIPFilter: "192.168.1.1/16",
 	//}
 
