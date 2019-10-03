@@ -1,0 +1,9 @@
+{
+    "Topic": "curated/multi_device",
+    "IncludeIfAny": [
+        {"SrcIP": "128.32.39.63"},
+        {"SrcIP": "128.32.38.53"},
+        {"DstIP": "128.32.39.63"},
+        {"DstIP": "128.32.38.53"}
+    ]
+}
