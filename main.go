@@ -106,12 +106,15 @@ func (fb *FilterBundle) MatchesPacket(pkt FlowPacket) bool {
 			return true
 		}
 	}
+	matchesAll := false
 	for _, iia := range fb.IncludeIfAll {
 		if !iia.MatchesPacket(pkt) {
 			return false
+		} else {
+			matchesAll = true
 		}
 	}
-	return true
+	return matchesAll
 }
 
 // accepts filters like 10.10.0.1/24 and addresses
@@ -282,28 +285,44 @@ func doFilter(c *cli.Context) error {
 	// subscribe to topic that creates filters
 	token1 := client.Subscribe("make_filter", 1, filter_cb)
 	token1.Wait()
-	defaultFilterBundle := FilterBundle{
-		ElideIfAny: []Filter{
-			{
-				SrcPort: "22",
-			},
-			{
-				DstPort: "22",
-			},
-		},
-		IncludeIfAll: []Filter{
-			{
-				Protocol: "tcp",
-			},
-		},
-		Topic: "gabetest",
-	}
-	client.Publish("make_filter", 1, false, defaultFilterBundle.ToJSON())
+	//defaultFilterBundle := FilterBundle{
+	//	ElideIfAny: []Filter{
+	//		{
+	//			SrcPort: "22",
+	//		},
+	//		{
+	//			DstPort: "22",
+	//		},
+	//	},
+	//	IncludeIfAll: []Filter{
+	//		{
+	//			Protocol: "tcp",
+	//		},
+	//	},
+	//	Topic: "gabetest",
+	//}
+	//client.Publish("make_filter", 1, false, defaultFilterBundle.ToJSON())
 
 	select {}
 
 	log.Println(c.StringSlice("filter"))
 
+	return nil
+}
+
+func makeView(c *cli.Context) error {
+	client := getClient(c.String("broker"))
+	f, err := os.Open(c.String("file"))
+	if err != nil {
+		return err
+	}
+	dec := json.NewDecoder(f)
+	var fb FilterBundle
+	if err := dec.Decode(&fb); err != nil {
+		return err
+	}
+	tok := client.Publish("make_filter", 1, false, fb.ToJSON())
+	tok.Wait()
 	return nil
 }
 
@@ -334,13 +353,30 @@ func main() {
 		},
 		{
 			Name:   "netview",
-			Usage:  "Filter traffic published on an MQTT bus according to a WAVE proof authenticated filter",
+			Usage:  "Daemon to filter out the firehose. listens to 'make_filter'",
 			Action: doFilter,
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  "broker, b",
 					Usage: "MQTT broker",
 					Value: "tcp://localhost:1883",
+				},
+			},
+		},
+		{
+			Name:   "makeview",
+			Usage:  "Post a JSON file to MQTT 'make_filter' to create a new filtered view",
+			Action: makeView,
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  "broker, b",
+					Usage: "MQTT broker",
+					Value: "tcp://localhost:1883",
+				},
+				cli.StringFlag{
+					Name:  "file, f",
+					Usage: "JSON file with filter",
+					Value: "filter1.json",
 				},
 			},
 		},
