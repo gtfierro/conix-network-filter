@@ -37,6 +37,8 @@ It produces a stream of packets. The packet structure looks like this:
     "DstIP":"151.101.188.134",
     "SrcPort":"59298",
     "DstPort":"443",
+    "SrcMAC":"cc:4e:24:6d:5f:80",
+    "DstMAC":""dc:ee:aa:be:f7:91,
     "Protocol":"tcp",
     "Payload":""
 }
