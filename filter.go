@@ -13,6 +13,8 @@ type FlowPacket struct {
 	DstIP    string
 	SrcPort  string
 	DstPort  string
+	SrcMAC   string
+	DstMAC   string
 	Protocol string
 	Payload  string
 }
@@ -35,6 +37,8 @@ type Filter struct {
 	DstIP    string
 	SrcPort  string
 	DstPort  string
+	SrcMAC   string
+	DstMAC   string
 	Protocol string
 }
 
@@ -140,6 +144,14 @@ func (filter *Filter) MatchesPacket(pkt FlowPacket) bool {
 		return false
 	}
 	if filter.DstPort != "" && filter.DstPort != "*" && filter.DstPort != pkt.DstPort {
+		return false
+	}
+
+	// filter on port
+	if filter.SrcMAC != "" && filter.SrcMAC != "*" && filter.SrcMAC != pkt.SrcMAC {
+		return false
+	}
+	if filter.DstMAC != "" && filter.DstMAC != "*" && filter.DstMAC != pkt.DstMAC {
 		return false
 	}
 

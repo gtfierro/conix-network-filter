@@ -74,6 +74,11 @@ func doScrape(c *cli.Context) error {
 				p.Protocol = "udp"
 			}
 
+			if m, ok := packet.LinkLayer().(*layers.Ethernet); ok {
+				flow := m.LinkFlow()
+				p.SrcMAC, p.DstMAC = flow.Src().String(), flow.Dst().String()
+			}
+
 			// filter out MQTT
 			if isMQTTPacket(p) {
 				continue
