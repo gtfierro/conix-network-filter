@@ -1,0 +1,12 @@
+[Unit]
+Description=CONIX Net Scraper
+After=network.target
+
+[Service]
+ExecStart=/path/to/conix scrape -i ens3 -f "ip" -b tcp://localhost:1883
+Restart=always
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target
