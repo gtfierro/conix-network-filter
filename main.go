@@ -69,8 +69,6 @@ type Filter struct {
 	SrcPort  string
 	DstPort  string
 	Protocol string
-	// topic to push filtered packets onto
-	Topic string
 }
 
 func (f Filter) ToJSON() []byte {
@@ -79,6 +77,41 @@ func (f Filter) ToJSON() []byte {
 		panic(err)
 	}
 	return b
+}
+
+type FilterBundle struct {
+	ElideIfAny   []Filter
+	IncludeIfAny []Filter
+	IncludeIfAll []Filter
+	// topic to push filtered packets onto
+	Topic string
+}
+
+func (fb FilterBundle) ToJSON() []byte {
+	b, err := json.Marshal(fb)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
+func (fb *FilterBundle) MatchesPacket(pkt FlowPacket) bool {
+	for _, eia := range fb.ElideIfAny {
+		if eia.MatchesPacket(pkt) {
+			return false
+		}
+	}
+	for _, iia := range fb.IncludeIfAny {
+		if iia.MatchesPacket(pkt) {
+			return true
+		}
+	}
+	for _, iia := range fb.IncludeIfAll {
+		if !iia.MatchesPacket(pkt) {
+			return false
+		}
+	}
+	return true
 }
 
 // accepts filters like 10.10.0.1/24 and addresses
@@ -208,8 +241,7 @@ func doScrape(c *cli.Context) error {
 	return nil
 }
 
-func makeFilter(f Filter) func(mqtt.Client, mqtt.Message) {
-
+func makeFilter(fb FilterBundle) func(mqtt.Client, mqtt.Message) {
 	return func(client mqtt.Client, msg mqtt.Message) {
 		var pkt FlowPacket
 		err := json.Unmarshal(msg.Payload(), &pkt)
@@ -217,9 +249,9 @@ func makeFilter(f Filter) func(mqtt.Client, mqtt.Message) {
 			log.Println("Could not load packet")
 		}
 
-		if f.MatchesPacket(pkt) {
+		if fb.MatchesPacket(pkt) {
 			// publish
-			token := client.Publish(f.Topic, 0, false, msg.Payload())
+			token := client.Publish(fb.Topic, 0, false, msg.Payload())
 			token.Wait()
 		}
 	}
@@ -229,17 +261,17 @@ func doFilter(c *cli.Context) error {
 	client := getClient(c.String("broker"))
 
 	filter_cb := func(client mqtt.Client, msg mqtt.Message) {
-		var filter Filter
-		err := json.Unmarshal(msg.Payload(), &filter)
+		var fb FilterBundle
+		err := json.Unmarshal(msg.Payload(), &fb)
 		if err != nil {
 			log.Println("Could not load packet")
 		}
-		if filter.Topic == "" {
+		if fb.Topic == "" {
 			log.Println("Filter needs output topic")
 			return
 		}
-		log.Println("Making filter", filter)
-		cb := makeFilter(filter)
+		log.Println("Making filter", fb)
+		cb := makeFilter(fb)
 
 		// subscribe to the broker to get all packets
 		token := client.Subscribe("packet/#", 1, cb)
@@ -250,11 +282,23 @@ func doFilter(c *cli.Context) error {
 	// subscribe to topic that creates filters
 	token1 := client.Subscribe("make_filter", 1, filter_cb)
 	token1.Wait()
-	defaultFilter := Filter{
-		Protocol: "tcp",
-		Topic:    "gabetest",
+	defaultFilterBundle := FilterBundle{
+		ElideIfAny: []Filter{
+			{
+				SrcPort: "22",
+			},
+			{
+				DstPort: "22",
+			},
+		},
+		IncludeIfAll: []Filter{
+			{
+				Protocol: "tcp",
+			},
+		},
+		Topic: "gabetest",
 	}
-	client.Publish("make_filter", 1, false, defaultFilter.ToJSON())
+	client.Publish("make_filter", 1, false, defaultFilterBundle.ToJSON())
 
 	select {}
 
