@@ -1,0 +1,6 @@
+{
+    "Topic": "curated/bcast",
+    "IncludeIfAny": [
+        {"DstMAC": "ff:ff:ff:ff:ff:ff"}
+    ]
+}
