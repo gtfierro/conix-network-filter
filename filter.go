@@ -68,6 +68,10 @@ func (fb *FilterBundle) MatchesPacket(pkt FlowPacket) bool {
 			return false
 		}
 	}
+	if len(fb.IncludeIfAny) == 0 && len(fb.IncludeIfAll) == 0 {
+		return true
+	}
+
 	for _, iia := range fb.IncludeIfAny {
 		if iia.MatchesPacket(pkt) {
 			return true

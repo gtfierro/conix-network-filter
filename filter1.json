@@ -1,10 +1,7 @@
 {
-    "Topic": "filtertest",
+    "Topic": "curated/nossh",
     "ElideIfAny": [
         {"SrcPort": "22"},
         {"DstPort": "22"}
-    ],
-    "IncludeIfAny": [
-        {"Protocol": "tcp", "SrcIP": "128.32.37.1/16"}
     ]
 }

@@ -1,0 +1,7 @@
+{
+    "Topic": "curated/berkeley",
+    "IncludeIfAny": [
+        {"Protocol": "tcp", "SrcIP": "128.32.37.1/16"}
+    ]
+}
+

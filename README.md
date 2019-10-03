@@ -63,10 +63,10 @@ You can use MQTT wildcards (`+` for 1, `#` for arbitrar suffix) to filter out wh
 
 The `netview` daemon produces curated streams of packets on a desired topic. The curated packets are determined by a mixture of WAVE permissions (coming soon) and simple JSON-based filters (implemented).
 
-You will need one `netview` daemon per curated stream. No need for sudo
+You will need one `netview` daemon per curated stream. The `--topic,-t` flag to `netview` gives the MQTT topic on which the curated stream will be publish. No need for sudo.
 
 ```
-./conix netview -b tcp://localhost:1883
+./conix netview -b tcp://localhost:1883 -t curated/nossh
 ```
 
 ### Registering Filters
@@ -91,3 +91,5 @@ Register
 ```
 ./conix makeview -b tcp://localhost:1883 -f myfilter.json
 ```
+
+The filter defined in the JSON file will *replace* whatever filter is currently configured for the `netview` daemon for that topic. If you choose a topic for which there is no `netview` daemon, nothing will happen.

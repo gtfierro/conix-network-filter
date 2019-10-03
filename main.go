@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/eclipse/paho.mqtt.golang"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/examples/util"
@@ -123,11 +124,10 @@ func doFilter(c *cli.Context) error {
 		// subscribe to the broker to get all packets
 		token := client.Subscribe("packet/#", 1, cb)
 		token.Wait()
-
 	}
 
 	// subscribe to topic that creates filters
-	token1 := client.Subscribe("make_filter", 1, filter_cb)
+	token1 := client.Subscribe(fmt.Sprintf("make_filter/%s", c.String("topic")), 1, filter_cb)
 	token1.Wait()
 	//defaultFilterBundle := FilterBundle{
 	//	ElideIfAny: []Filter{
@@ -165,7 +165,7 @@ func makeView(c *cli.Context) error {
 	if err := dec.Decode(&fb); err != nil {
 		return err
 	}
-	tok := client.Publish("make_filter", 1, false, fb.ToJSON())
+	tok := client.Publish(fmt.Sprintf("make_filter/%s", fb.Topic), 1, false, fb.ToJSON())
 	tok.Wait()
 	return nil
 }
@@ -205,6 +205,11 @@ func main() {
 					Usage: "MQTT broker",
 					Value: "tcp://localhost:1883",
 				},
+				cli.StringFlag{
+					Name:  "topic, t",
+					Usage: "output topic",
+					Value: "default",
+				},
 			},
 		},
 		{
@@ -219,7 +224,7 @@ func main() {
 				},
 				cli.StringFlag{
 					Name:  "file, f",
-					Usage: "JSON file with filter",
+					Usage: "JSON file with filter. The Topic name selects the netview",
 					Value: "filter1.json",
 				},
 			},
