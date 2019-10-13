@@ -40,14 +40,38 @@ func doScrape(c *cli.Context) error {
 	client := getClient(c.String("broker"))
 
 	defer util.Run()()
-	if handle, err := pcap.OpenLive(c.String("interface"), 1600, true, pcap.BlockForever); err != nil {
-		return err
-	} else if err := handle.SetBPFFilter(c.String("filter")); err != nil { // optional
+
+	var handle *pcap.Handle
+	var handleerr error
+	if _, err := os.Stat(c.String("interface")); os.IsNotExist(err) {
+		handle, handleerr = pcap.OpenLive(c.String("interface"), 1600, true, pcap.BlockForever)
+	} else if err == nil {
+		handle, handleerr = pcap.OpenOffline("/tmp/pcap")
+	}
+	if handleerr != nil {
+		return handleerr
+	}
+
+	//if handle, err := pcap.OpenOffline("/tmp/pcap"); err != nil {
+	//if handle, err := pcap.OpenLive(c.String("interface"), 1600, true, pcap.BlockForever); err != nil {
+	//if handle, err := pcap.OpenLive(c.String("interface"), 1600, true, pcap.BlockForever); err != nil {
+	//return err
+	if err := handle.SetBPFFilter(c.String("filter")); err != nil { // optional
 		return err
 	} else {
 		packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
+		for {
+			packet, err := packetSource.NextPacket()
+			if err != nil && err == pcap.NextErrorNoMorePackets {
+				log.Println("no more packets; waiting")
+				time.Sleep(1 * time.Second)
+				continue
+			} else if err != nil {
+				log.Println("packet source", err)
+				continue
+			}
 
-		for packet := range packetSource.Packets() {
+			//for packet := range packetSource.Packets() {
 			if packet.NetworkLayer() == nil || packet.TransportLayer() == nil {
 				continue
 			}

@@ -21,10 +21,18 @@ You need an MQTT Broker set up somewhere
 ### Scraper Daemon
 
 You need at least one `scraper` daemon running to push network traffic onto the broker.
-The `scraper` daemon takes a network interface to scrape with libpcap and a BPF filter (usually good to keep this at `"ip"`). You will likely need `sudo` for this
+The `scraper` daemon takes as arguments a packet source and a BPF filter (usually good to keep this at `"ip"`). The packet source can be either a network interface (e.g. `eth0`) or a named pipe representing a remote packet source. To get a named pipe of packets from a remote machine, run the `get-remote-tcpdump.sh` script with the hostname and interface of the remote machine (e.g. `./get-remote-tcpdump.sh root@192.168.1.1 br-lan`); this will create a named pipe `/tmp/pcap` on your machine.
+
+Now that you've established the packet source, you can run the `conix scrape` daemon.
+You will likely need `sudo` for this; use the `-i` flag to point to the interace if it is local, or to the named pipe if it is remote:
 
 ```
+# local interface
 sudo ./conix scrape -i wlp0s20f3 -f "ip" -b tcp://localhost:1883
+
+# remote interface
+./get-remote-tcpdump.sh root@192.168.1.1  br-lan # separate terminal
+./conix scrape -i /tmp/pcap -f "ip" -b tcp://localhost:1883
 ```
 
 Leave this running.
